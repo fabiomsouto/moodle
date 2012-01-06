@@ -311,7 +311,12 @@ class core_user_external extends external_api {
 
         $transaction = $DB->start_delegated_transaction();
 
+        $updatedusers = array();
         foreach ($params['users'] as $user) {
+            //hash password here - MDL-30878
+            if (isset($user['password']))
+                $user['password'] = hash_internal_user_password($user['password']);
+
             user_update_user($user);
             //update user custom fields
             if(!empty($user['customfields'])) {
@@ -330,11 +335,12 @@ class core_user_external extends external_api {
                     set_user_preference($preference['type'], $preference['value'],$user['id']);
                 }
             }
+            $updatedusers[] = array('id' => $user['id']);
         }
 
         $transaction->allow_commit();
 
-        return null;
+        return $updatedusers;
     }
 
    /**
@@ -342,7 +348,13 @@ class core_user_external extends external_api {
      * @return external_description
      */
     public static function update_users_returns() {
-        return null;
+        return new external_multiple_structure(
+            new external_single_structure(
+                array(
+                    'id'       => new external_value(PARAM_INT, 'user id')
+                )
+            )
+        );
     }
 
     /**
