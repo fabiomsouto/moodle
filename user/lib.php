@@ -71,7 +71,9 @@ function user_update_user($user) {
     }
 
     /// hash the password
-    $user->password = hash_internal_user_password($user->password);
+    //MDL-30878 hashing is done at the webservice and not here, because only
+    //there we know if the password was changed
+    //$user->password = hash_internal_user_password($user->password);
 
     $user->timemodified = time();
     $DB->update_record('user', $user);
