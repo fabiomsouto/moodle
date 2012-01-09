@@ -300,10 +300,6 @@ class moodle_user_external extends external_api {
 
         $updatedusers = array();
         foreach ($params['users'] as $user) {
-            //hash password here - MDL-30878
-            if (isset($user['password']))
-                $user['password'] = hash_internal_user_password($user['password']);
-
             user_update_user($user);
             //update user custom fields
             if(!empty($user['customfields'])) {
