@@ -331,13 +331,7 @@ class moodle_user_external extends external_api {
      * @return external_description
      */
     public static function update_users_returns() {
-        return new external_multiple_structure(
-            new external_single_structure(
-                array(
-                    'id'       => new external_value(PARAM_INT, 'user id')
-                )
-            )
-        );
+        return null;
     }
 
     /**
