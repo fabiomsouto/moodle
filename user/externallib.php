@@ -311,7 +311,6 @@ class core_user_external extends external_api {
 
         $transaction = $DB->start_delegated_transaction();
 
-        $updatedusers = array();
         foreach ($params['users'] as $user) {
             user_update_user($user);
             //update user custom fields
@@ -331,12 +330,11 @@ class core_user_external extends external_api {
                     set_user_preference($preference['type'], $preference['value'],$user['id']);
                 }
             }
-            $updatedusers[] = array('id' => $user['id']);
         }
 
         $transaction->allow_commit();
 
-        return $updatedusers;
+        return null;
     }
 
    /**
