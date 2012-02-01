@@ -49,6 +49,7 @@ class core_user_external extends external_api {
                             'lastname'    => new external_value(PARAM_NOTAGS, 'The family name of the user'),
                             'email'       => new external_value(PARAM_EMAIL, 'A valid and unique email address'),
                             'auth'        => new external_value(PARAM_PLUGIN, 'Auth plugins include manual, ldap, imap, etc', VALUE_DEFAULT, 'manual', NULL_NOT_ALLOWED),
+                            'suspended'   => new external_value(PARAM_NUMBER, 'Suspend user account, either 0 to enable user login or 1 to disable it', VALUE_OPTIONAL),
                             'idnumber'    => new external_value(PARAM_RAW, 'An arbitrary ID code number perhaps from the institution', VALUE_DEFAULT, ''),
                             'lang'        => new external_value(PARAM_SAFEDIR, 'Language code such as "en", must exist on server', VALUE_DEFAULT, $CFG->lang, NULL_NOT_ALLOWED),
                             'theme'       => new external_value(PARAM_PLUGIN, 'Theme name such as "standard", must exist on server', VALUE_OPTIONAL),
@@ -163,6 +164,11 @@ class core_user_external extends external_api {
                 }
             }
 
+            //if user was suspended, kill his session
+            if (isset($user['suspended']) and $user['suspended']) {
+                session_kill_user($user['id']);
+            }
+
             $userids[] = array('id'=>$user['id'], 'username'=>$user['username']);
         }
 
@@ -261,6 +267,7 @@ class core_user_external extends external_api {
                             'lastname'    => new external_value(PARAM_NOTAGS, 'The family name of the user', VALUE_OPTIONAL),
                             'email'       => new external_value(PARAM_EMAIL, 'A valid and unique email address', VALUE_OPTIONAL, '',NULL_NOT_ALLOWED),
                             'auth'        => new external_value(PARAM_PLUGIN, 'Auth plugins include manual, ldap, imap, etc', VALUE_OPTIONAL, '', NULL_NOT_ALLOWED),
+                            'suspended'   => new external_value(PARAM_NUMBER, 'Suspend user account, either 0 to enable user login or 1 to disable it', VALUE_OPTIONAL),
                             'idnumber'    => new external_value(PARAM_RAW, 'An arbitrary ID code number perhaps from the institution', VALUE_OPTIONAL),
                             'lang'        => new external_value(PARAM_SAFEDIR, 'Language code such as "en", must exist on server', VALUE_OPTIONAL, '', NULL_NOT_ALLOWED),
                             'theme'       => new external_value(PARAM_PLUGIN, 'Theme name such as "standard", must exist on server', VALUE_OPTIONAL),
@@ -330,6 +337,11 @@ class core_user_external extends external_api {
                     set_user_preference($preference['type'], $preference['value'],$user['id']);
                 }
             }
+
+            //if user was suspended, kill his session
+            if (isset($user['suspended']) and $user['suspended']) {
+                session_kill_user($user['id']);
+            }
         }
 
         $transaction->allow_commit();
@@ -394,6 +406,7 @@ class core_user_external extends external_api {
                 //fields matching permissions from /user/editadvanced.php
                 if ($currentuser or $hasuserupdatecap) {
                     $userarray['auth']       = $user->auth;
+                    $userarray['suspended']  = $user->suspended;
                     $userarray['confirmed']  = $user->confirmed;
                     $userarray['idnumber']   = $user->idnumber;
                     $userarray['lang']       = $user->lang;
@@ -437,6 +450,7 @@ class core_user_external extends external_api {
                     'firstaccess' => new external_value(PARAM_INT, 'first access to the site (0 if never)', VALUE_OPTIONAL),
                     'lastaccess'  => new external_value(PARAM_INT, 'last access to the site (0 if never)', VALUE_OPTIONAL),
                     'auth'        => new external_value(PARAM_PLUGIN, 'Auth plugins include manual, ldap, imap, etc', VALUE_OPTIONAL),
+                    'suspended'   => new external_value(PARAM_NUMBER, 'Suspend user account, either 0 to enable user login or 1 to disable it'),
                     'confirmed'   => new external_value(PARAM_NUMBER, 'Active user: 1 if confirmed, 0 otherwise', VALUE_OPTIONAL),
                     'idnumber'    => new external_value(PARAM_RAW, 'An arbitrary ID code number perhaps from the institution', VALUE_OPTIONAL),
                     'lang'        => new external_value(PARAM_SAFEDIR, 'Language code such as "en", must exist on server', VALUE_OPTIONAL),
