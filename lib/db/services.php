@@ -368,6 +368,15 @@ $functions = array(
 
     // === course related functions ===
 
+    'core_course_get_categories' => array(
+        'classname'   => 'core_course_external',
+        'methodname'  => 'get_categories',
+        'classpath'   => 'course/externallib.php',
+        'description' => 'Return categories details',
+        'type'        => 'read',
+        'capabilities'=> '',
+    ),
+
     'moodle_course_get_courses' => array(
         'classname'   => 'core_course_external',
         'methodname'  => 'get_courses',

@@ -238,6 +238,168 @@ class core_course_external extends external_api {
 
     /**
      * Returns description of method parameters
+     *
+     * @return external_function_parameters
+     * @since Moodle 2.3
+     */
+    public function get_categories_parameters() {
+        return new external_function_parameters(
+            array(
+                    'categoryid' => new external_value(PARAM_INT, 'category id to be returned - if 0 all the categories that the user can see are returned.', VALUE_DEFAULT, 0),
+                    'addsubcategories' => new external_value(PARAM_BOOL, 'return the sub categories infos
+                                                        (1 - default) otherwise only the category info (0)', VALUE_DEFAULT, 1)
+                )
+        );
+    }
+
+    /**
+     * Get categories
+     *
+     * @param int $categoryid the category id to get - if 0 all categories that the user can see are returned
+     * @param boolean $addsubcategories obtain only the category (false) or its subcategories (true - default)
+     * @return array list of categories
+     * @since Moodle 2.3
+     */
+    public static function get_categories($categoryid = 0, $addsubcategories = true) {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . "/course/lib.php");
+
+        //validate parameters
+        $params = self::validate_parameters(self::get_categories_parameters(),
+                array('categoryid' => $categoryid, 'addsubcategories' => $addsubcategories));
+
+        //retrieve the categories
+        $categories = array();
+        if (!empty($params['categoryid'])) {
+            //retrieve the specified category
+            $category = $DB->get_record('course_categories', array('id' => $params['categoryid']));
+            $categories[] = $category;
+
+            //retrieve its sub subcategories (all levels)
+            if (!empty($addsubcategories)) {
+                $sqllike = $DB->sql_like('path', ':path');
+                $sqlparams = array('path' => $category->path.'%'); //it will include the specified category
+                $categories = $DB->get_records_select('course_categories', $sqllike, $sqlparams);
+            }
+        } else {
+            //retrieve all categories in the database
+            $categories = $DB->get_records('course_categories');
+        }
+
+        //the not returned categories. key => category id, value => reason of exclusion
+        $excludedcats = array();
+
+        //the returned categories
+        $categoriesinfo = array();
+
+        foreach ($categories as $category) {
+
+            //check if the category is a child of an excluded category, if yes exclude it too (excluded => do not return)
+            $parents = explode('/', $category->path);
+            unset($parents[0]); // first key is always empty because path start with / => /1/2/4
+            foreach ($parents as $parentid) {
+                //Note: when the parent exclusion was due to the context,
+                //      the sub category could still be returned.
+                if (isset($excludedcats[$parentid]) and $excludedcats[$parentid] != 'context') {
+                    $excludedcats[$category->id] = 'parent';
+                }
+            }
+
+            //check category depth is <= maxdepth (do not check for user who can manage categories)
+            if ((!empty($CFG->maxcategorydepth) && count($parents) > $CFG->maxcategorydepth)
+                    and !has_capability('moodle/category:manage', $context)) {
+                $excludedcats[$category->id] = 'depth';
+            }
+
+            //check the user can use the category context
+            $context = context_coursecat::instance($category->id);
+            try {
+                self::validate_context($context);
+            } catch (Exception $e) {
+                $excludedcats[$category->id] = 'context';
+
+                //if it was the requested category then throw an exception
+                if (isset($params['categoryid']) && $category->id == $params['categoryid']) {
+                    $exceptionparam = new stdClass();
+                    $exceptionparam->message = $e->getMessage();
+                    $exceptionparam->catid = $category->id;
+                    throw new moodle_exception('errorcatcontextnotvalid', 'webservice', '', $exceptionparam);
+                }
+            }
+
+            //return the category information
+            if (!isset($excludedcats[$category->id])) {
+
+                //final check to see if the category is visible to the user
+                if ($category->visible
+                        or has_capability('moodle/category:viewhiddencategories', context_system::instance())
+                        or has_capability('moodle/category:manage', $context)) {
+
+                    $categoryinfo = array();
+                    $categoryinfo['id'] = $category->id;
+                    $categoryinfo['name'] = $category->name;
+                    $categoryinfo['description'] = file_rewrite_pluginfile_urls($category->description,
+                            'webservice/pluginfile.php', $context->id, 'coursecat', 'description', null);
+                    $options = new stdClass;
+                    $options->noclean = true;
+                    $options->para = false;
+                    $categoryinfo['description'] = format_text($categoryinfo['description'],
+                            $category->descriptionformat, $options);
+                    $categoryinfo['parent'] = $category->parent;
+                    $categoryinfo['sortorder'] = $category->sortorder;
+                    $categoryinfo['coursecount'] = $category->coursecount;
+                    $categoryinfo['depth'] = $category->depth;
+                    $categoryinfo['path'] = $category->path;
+
+                    //some fields only returned for admin
+                    if (has_capability('moodle/category:manage', $context)) {
+                        $categoryinfo['idnumber'] = $category->idnumber;
+                        $categoryinfo['visible'] = $category->visible;
+                        $categoryinfo['visibleold'] = $category->visibleold;
+                        $categoryinfo['timemodified'] = $category->timemodified;
+                        $categoryinfo['theme'] = $category->theme;
+                    }
+
+                    $categoriesinfo[] = $categoryinfo;
+                } else {
+                    $excludedcats[$category->id] = 'visibility';
+                }
+            }
+        }
+
+        return $categoriesinfo;
+    }
+
+    /**
+     * Returns description of method result value
+     *
+     * @return external_description
+     * @since Moodle 2.3
+     */
+    public static function get_categories_returns() {
+        return new external_multiple_structure(
+            new external_single_structure(
+                array(
+                    'id' => new external_value(PARAM_INT, 'category id'),
+                    'name' => new external_value(PARAM_TEXT, 'category name'),
+                    'idnumber' => new external_value(PARAM_RAW, 'category id number', VALUE_OPTIONAL),
+                    'description' => new external_value(PARAM_RAW, 'category description'),
+                    'parent' => new external_value(PARAM_INT, 'parent category id'),
+                    'sortorder' => new external_value(PARAM_INT, 'category sorting order'),
+                    'coursecount' => new external_value(PARAM_INT, 'number of courses in this category'),
+                    'visible' => new external_value(PARAM_INT, '1: available, 0:not available', VALUE_OPTIONAL),
+                    'visibleold' => new external_value(PARAM_INT, '1: available, 0:not available', VALUE_OPTIONAL),
+                    'timemodified' => new external_value(PARAM_INT, 'timestamp', VALUE_OPTIONAL),
+                    'depth' => new external_value(PARAM_INT, 'category depth'),
+                    'path' => new external_value(PARAM_TEXT, 'category path'),
+                    'theme' => new external_value(PARAM_THEME, 'category theme', VALUE_OPTIONAL),
+                ), 'categories'
+            )
+        );
+    }
+
+    /**
+     * Returns description of method parameters
      * @return external_function_parameters
      */
     public static function get_courses_parameters() {
