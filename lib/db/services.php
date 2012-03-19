@@ -367,7 +367,22 @@ $functions = array(
     ),
 
     // === course related functions ===
-
+    'core_course_create_categories' => array(
+        'classname'   => 'core_course_external',
+        'methodname'  => 'create_categories',
+        'classpath'   => 'course/externallib.php',
+        'description' => 'Create course categories',
+        'type'        => 'write',
+        'capabilities'=> 'moodle/category:manage',
+    ),
+    'core_course_get_categories' => array(
+        'classname'   => 'core_course_external',
+        'methodname'  => 'get_categories',
+        'classpath'   => 'course/externallib.php',
+        'description' => 'Return categories details',
+        'type'        => 'read',
+        'capabilities'=> '',
+    ),
     'core_course_update_categories' => array(
         'classname'   => 'core_course_external',
         'methodname'  => 'update_categories',
@@ -375,6 +390,14 @@ $functions = array(
         'description' => 'Update categories',
         'type'        => 'write',
         'capabilities'=> 'moodle:category/manage',
+    ),
+    'core_course_delete_categories' => array(
+        'classname'   => 'core_course_external',
+        'methodname'  => 'delete_categories',
+        'classpath'   => 'course/externallib.php',
+        'description' => 'Delete course categories',
+        'type'        => 'write',
+        'capabilities'=> 'moodle/category:manage',
     ),
     'moodle_course_get_courses' => array(
         'classname'   => 'core_course_external',
