@@ -86,14 +86,14 @@ class webservice_test extends UnitTestCase {
      */
     public function setUp() {
         // token to test
-        $this->testtoken = 'acabec9d20933913f14309785324f579';
+        $this->testtoken = '076e1623e20eaed885d9dcb93d04395f';
 
         // protocols to test
         $this->testrest = false; // TODO MDL-30210/MDL-22965 call REST in JSON mode
                                  // DO NOT CHANGE
                                  // The REST server cannot be tested till the issue ares fixed
         $this->testxmlrpc = false;
-        $this->testsoap = false;
+        $this->testsoap = true;
 
         // READ-ONLY DB tests
         $this->readonlytests = array(
@@ -121,7 +121,8 @@ class webservice_test extends UnitTestCase {
             'moodle_group_delete_groups' => false,
             'moodle_enrol_manual_enrol_users' => false,
             'moodle_message_send_messages' => false,
-            'moodle_notes_create_notes' => false
+            'moodle_notes_create_notes' => false,
+            'core_course_create_categories' => false
         );
 
         // performance testing: number of time the web service are run
@@ -236,6 +237,154 @@ class webservice_test extends UnitTestCase {
                 // error_log(print_r($this->timersoap));
             }
         }
+    }
+
+    /**
+     * Test core_course_create_categories web service function
+     *
+     * @param webservice_rest_client|webservice_soap_client|webservice_xmlrpc_client $client the protocol test client
+     */
+    private function core_course_create_categories($client) {
+        global $DB;
+        $categories = array();
+        $function = 'core_course_create_categories';
+
+        // Get a random category
+        $allcategories = get_course_category_tree();
+        $topcategoryid = $allcategories[0]->id;
+
+        // Category 1
+        $category1['name'] = 'test category 1 to delete';
+        $category1['parent'] =  $topcategoryid;
+        $category1['idnumber'] = 'idnumber for a category 1';
+        $category1['description'] ='Category test 1';
+        $categories[] = $category1;
+
+        // Category 2
+        $category2['name'] = 'test category 2 to delete';
+        $category2['parent'] =  $topcategoryid;
+        $category2['idnumber'] = 'idnumber for a category 2';
+        $category2['description'] ='Category test 2';
+        $categories[] = $category2;
+
+        // Category 3 (with inexistant parent)
+        // Get an inexistant category id to use as parent
+        $category3['name'] = 'test category 3 to delete';
+        $category3['idnumber'] = 'idnumber for a category 3';
+        $category3['description'] ='Category test 3';
+        // Don't add yet
+
+        // Category 4 and 5 (with an existing idnumber)
+        $category4['name'] = 'test category 4 to delete';
+        $category4['parent'] =  $topcategoryid;
+        $category4['idnumber'] = 'idnumber for repeating idnumber test';
+        $category4['description'] ='Category test 4';
+        // Don't add yet
+        $category5['name'] = 'test category 5 to delete';
+        $category5['parent'] =  $topcategoryid;
+        $category5['idnumber'] = 'idnumber for repeating idnumber test';
+        $category5['description'] ='Category test 5';
+        // Don't add yet
+
+        // Category 6 (id number too long)
+        $category6['name'] = 'test category 6 to delete';
+        $category6['parent'] = $topcategoryid;
+        $category6['idnumber'] = "category6 " . implode(",", range(0, 100));
+        $category6['description'] ='Category test 6';
+
+        // Category 7 (category name too long)
+        $category7['name'] = 'test category 7 to delete' . implode(",", range(0, 30));;
+        $category7['parent'] = $topcategoryid;
+        $category7['idnumber'] = "idnumber for a category 7";
+        $category7['description'] ='Category test 7';
+
+        $catstodelete = array($category1['idnumber'], $category2['idnumber'], $category3['idnumber'],
+                                $category4['idnumber'], $category5['idnumber'], $category6['idnumber'], $category7['idnumber']);
+
+        // Delete previous categories (if some problem previously happened)
+        $DB->delete_records_list('course_categories', 'idnumber', $catstodelete);
+
+        // Test the normal execution
+        $params = array('categories' => $categories);
+        $returnedcategories = $client->call($function, $params);
+        $this->assertEqual(count($returnedcategories), count($categories));
+
+        // Check if the values were correctly filled
+        $createdcat1 = $DB->get_record('course_categories', array('id' => $returnedcategories[0]['id']));
+        $this->assertEqual($createdcat1->name, $category1['name']);
+        $this->assertEqual($createdcat1->parent, $topcategoryid);
+        $this->assertEqual($createdcat1->idnumber, $category1['idnumber']);
+        $this->assertEqual($createdcat1->description, $category1['description']);
+
+        $createdcat2 = $DB->get_record('course_categories', array('id' => $returnedcategories[1]['id']));
+        $this->assertEqual($createdcat2->name, $category2['name']);
+        $this->assertEqual($createdcat2->parent, $topcategoryid);
+        $this->assertEqual($createdcat2->idnumber, $category2['idnumber']);
+        $this->assertEqual($createdcat2->description, $category2['description']);
+
+        // Delete previous categories (if some problem previously happened)
+        $DB->delete_records_list('course_categories', 'idnumber', $catstodelete);
+
+        // Test non existing parent
+        $maxcatid = $DB->get_field('course_categories', 'MAX(id)', array());
+        $inexistantid = $maxcatid + 1;
+        $category3['parent'] =  (int) $inexistantid;
+        $DB->delete_records_list('course_categories', 'idnumber', $catstodelete);
+        $categories = array();
+        $categories[] = $category3;
+        $params = array('categories' => $categories);
+        try {
+            $client->call($function, $params);
+            $this->assertTrue(false);
+        }
+        catch (Exception $ex) {
+            $this->assertTrue(true);
+        }
+        // Delete previous categories (if some problem previously happened)
+        $DB->delete_records_list('course_categories', 'idnumber', $catstodelete);
+
+        // Test repeating idnumber
+        $categories = array();
+        $categories[] = $category4;
+        $categories[] = $category5;
+        $params = array('categories' => $categories);
+        try {
+            $client->call($function, $params);
+            $this->assertTrue(false);
+        }
+        catch (Exception $ex) {
+            $this->assertTrue(true);
+        }
+        // Delete previous categories (if some problem previously happened)
+        $DB->delete_records_list('course_categories', 'idnumber', $catstodelete);
+
+        // Test idnumber too long
+        $categories = array();
+        $categories[] = $category6;
+        $params = array('categories' => $categories);
+        try {
+            $client->call($function, $params);
+            $this->assertTrue(false);
+        }
+        catch (Exception $ex) {
+            $this->assertTrue(true);
+        }
+        // Delete previous categories (if some problem previously happened)
+        $DB->delete_records_list('course_categories', 'idnumber', $catstodelete);
+
+        // Test category name too long
+        $categories = array();
+        $categories[] = $category7;
+        $params = array('categories' => $categories);
+        try {
+            $client->call($function, $params);
+            $this->assertTrue(false);
+        }
+        catch (Exception $ex) {
+            $this->assertTrue(true);
+        }
+        // Delete previous categories (if some problem previously happened)
+        $DB->delete_records_list('course_categories', 'idnumber', $catstodelete);
     }
 
     /**

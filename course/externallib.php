@@ -401,6 +401,129 @@ class core_course_external extends external_api {
     }
 
     /**
+    * Returns description of method parameters
+    *
+    * @return external_function_parameters
+    * @since Moodle 2.3
+    */
+    public static function create_categories_parameters() {
+        return new external_function_parameters(
+            array(
+                'categories' => new external_multiple_structure(
+                        new external_single_structure(
+                            array(
+                                'name' => new external_value(PARAM_TEXT, 'new category name'),
+                                'parent' => new external_value(PARAM_INT, 'the parent category id inside which the new category will be created'),
+                                'idnumber' => new external_value(PARAM_RAW, 'the new category idnumber', VALUE_OPTIONAL),
+                                'description' => new external_value(PARAM_CLEANHTML, 'the new category description', VALUE_OPTIONAL),
+                                'theme' => new external_value(PARAM_THEME,
+                                        'the new category theme. This option must be enabled on moodle', VALUE_OPTIONAL),
+                        )
+                    )
+                )
+            )
+        );
+    }
+
+    /**
+     * Create categories
+     *
+     * @param array $categories - see create_categories_parameters() for the array structure
+     * @return array - see create_categories_returns() for the array structure
+     * @since Moodle 2.3
+     */
+    public static function create_categories($categories) {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . "/course/lib.php");
+
+        $params = self::validate_parameters(self::create_categories_parameters(),
+                        array('categories' => $categories));
+
+        $transaction = $DB->start_delegated_transaction();
+	
+        $createdcategories = array();
+        foreach($params['categories'] as $category) {
+            if ($category['parent']) {
+                if (!$DB->record_exists('course_categories', array('id' => $category['parent']))) {
+                    throw new moodle_exception('unknowcategory');
+                }
+                $context = context_coursecat::instance($category['parent']);
+            }
+            else {
+                $context = context_system::instance();
+            }
+            self::validate_context($context);
+            require_capability('moodle/category:manage', $context);
+
+            $newcategory = new stdClass();
+            $newcategory->sortorder = 999; //same as in the course/editcategory.php
+            $newcategory->parent = $category['parent'];
+            //check id number
+            if (!empty($category['idnumber'])) { //same as in course/editcategory_form.php
+                if (strlen($category['idnumber'])>100) {
+                    throw new moodle_exception('idnumbertoolong');
+                }
+                if ($existing = $DB->get_record('course_categories', array('idnumber' => $category['idnumber']))) {
+                    if ($existing->id) {
+                        throw new moodle_exception('idnumbertaken');
+                    }
+                }
+            }
+            $newcategory->idnumber = $category['idnumber'];
+
+            //check name
+            if (strlen($category['name'])>30) {
+                    throw new moodle_exception('categorytoolong');
+            }
+            $newcategory->name = $category['name'];
+
+            //Format the description
+            if (!empty($category['description'])) {
+                $options = new stdClass();
+                $options->para = false;
+                $options->newlines = false;
+                $options->context = $context;
+                $newcategory->description = format_text($category['description'], FORMAT_HTML, $options);
+            }
+            $newcategory->descriptionformat = FORMAT_HTML;
+
+            if (isset($category['theme']) and !empty($CFG->allowcategorythemes)) {
+                $newcategory->theme = $category['theme'];
+            }
+            $newcategory->id = $DB->insert_record('course_categories', $newcategory); 
+            $newcategory->context = context_coursecat::instance($newcategory->id);
+
+            $newcategory->context->mark_dirty();
+
+            //populate special fields
+            fix_course_sortorder();
+
+            $createdcategories[] = array('id' => $newcategory->id, 'name' => $newcategory->name);
+        }
+
+        $transaction->allow_commit();
+
+        return $createdcategories;
+    }
+
+    /**
+    * Returns description of method parameters
+    *
+    * @return external_function_parameters
+    * @since Moodle 2.3 
+    */
+    public static function create_categories_returns() {
+        return new external_multiple_structure(
+            new external_single_structure(
+                array(
+                    'id' => new external_value(PARAM_INT, 'new category id'),
+                    'name' => new external_value(PARAM_TEXT, 'new category name'),
+                )
+            )
+        );
+    }
+
+    /**
      * Returns description of method parameters
      * @return external_function_parameters
      */
