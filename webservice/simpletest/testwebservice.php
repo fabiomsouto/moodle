@@ -86,14 +86,14 @@ class webservice_test extends UnitTestCase {
      */
     public function setUp() {
         // token to test
-        $this->testtoken = '076e1623e20eaed885d9dcb93d04395f';
+        $this->testtoken = 'acabec9d20933913f14309785324f579';
 
         // protocols to test
         $this->testrest = false; // TODO MDL-30210/MDL-22965 call REST in JSON mode
                                  // DO NOT CHANGE
                                  // The REST server cannot be tested till the issue ares fixed
         $this->testxmlrpc = false;
-        $this->testsoap = true;
+        $this->testsoap = false;
 
         // READ-ONLY DB tests
         $this->readonlytests = array(
@@ -122,7 +122,8 @@ class webservice_test extends UnitTestCase {
             'moodle_enrol_manual_enrol_users' => false,
             'moodle_message_send_messages' => false,
             'moodle_notes_create_notes' => false,
-            'core_course_create_categories' => false
+			'core_course_create_categories' => false
+            'core_course_delete_categories' => false
         );
 
         // performance testing: number of time the web service are run
@@ -1837,6 +1838,173 @@ class webservice_test extends UnitTestCase {
         $notes = $client->call($function, $params);
 
         $this->assertEqual(3, count($notes)); // 1 info is a success, 2 others should be failed
+    }
+
+
+    /**
+     * Test core_course_delete_categories web service function
+     *
+     * @param webservice_rest_client|webservice_soap_client|webservice_xmlrpc_client $client the protocol test client
+     */
+    private function core_course_delete_categories($client) {
+        global $DB;
+
+        $function = 'core_course_delete_categories';
+        /**
+         * This test will:
+         * - delete a newly created, empty category
+         * - delete a category with a subcategory
+         * - delete a category with a subcategory, moving it to an existing category
+         * - delete a category with a subcategory, moving it to an unexisting category
+         * - delete a non existing category
+         */
+
+        $categories = array();
+        // Create categories (same as add_groupmembers)
+        $category = new stdClass();
+        $category2 = new stdClass();
+        $category3 = new stdClass();
+        $category4 = new stdClass();
+        $category5 = new stdClass();
+        $category6 = new stdClass();
+        $category7 = new stdClass();
+        $category8 = new stdClass();
+        $category9 = new stdClass();
+
+        $category->name = 'tmpcategoryfortest123';
+        $category2->name = 'tmpcategoryfortest456';
+        $category3->name = 'tmpcategoryfortest789';
+        $category4->name = 'tmpcategoryfortest012';
+        $category5->name = 'tmpcategoryfortest345';
+        $category6->name = 'tmpcategoryfortest678';
+        $category7->name = 'tmpcategoryfortest901';
+        $category8->name = 'tmpcategoryfortest234';
+        $category9->name = 'tmpcategoryfortest567';
+
+        /*
+         * Delete a newly created, empty category
+         */
+        $category->id = $DB->insert_record('course_categories', $category);
+        unset($category->name);
+        $categories[] = $category;
+        $params = array('categories' => $categories);
+
+        $client->call($function, $params);
+
+        // Verify that the category no longer exists
+        $result = $DB->get_record('course_categories', array('id' => $category->id), '*');
+        $this->assertTrue(!$result);
+
+        /*
+         * Delete a category with a subcategory in it.
+         */
+        $category2->id = $DB->insert_record('course_categories', $category2);
+        $category3->parent = $category2->id;
+        $category3->id = $DB->insert_record('course_categories', $category3);
+        unset($category2->name);
+        unset($category3->name);
+        unset($category3->parent);
+
+        $categories = array();
+        // We delete just category 2, assuming that category 3 will also be deleted
+        $categories[] = $category2;
+        $params = array('categories' => $categories);
+
+        $client->call($function, $params);
+        $result = false;
+        $result |= $DB->get_record('course_categories', array('id' => $category2->id), '*');
+        $result |= $DB->get_record('course_categories', array('id' => $category3->id), '*');
+
+        $this->assertTrue(!$result);
+
+        /*
+         * Delete a category with a subcategory in it, moving the content to an existing category
+         */
+        $category4->id = $DB->insert_record('course_categories', $category4);
+        unset($category4->name);
+        $category5->parent = $category4->id;
+        $category5->id = $DB->insert_record('course_categories', $category5);
+        unset($category5->name);
+        unset($category5->parent);
+        $category6->id = $DB->insert_record('course_categories', $category6);
+        unset($category6->name);
+
+        $categories = array();
+        // We delete category 4 alone, and specify that the new parent must be category 6
+        $category4->newparent = $category6->id;
+        $categories[] = $category4;
+        $params = array('categories' => $categories);
+
+
+        $client->call($function, $params);
+
+        // Check if category 5 reflects the new parent
+        $result = $DB->get_record('course_categories', array('id' => $category5->id));
+
+        $this->assertTrue($result->parent == $category6->id);
+
+
+        /*
+         * Delete a category with a subcategory in it, moving the contents into an nonexisting category
+         */
+        $category7->id = $DB->insert_record('course_categories', $category7);
+        unset($category7->name);
+        $category8->parent = $category7->id;
+        $category8->id = $DB->insert_record('course_categories', $category8);
+        unset($category8->name);
+        unset($category8->parent);
+
+        $maxcatid = $DB->get_field('course_categories', 'MAX(id)', array());
+        $inexistantid = $maxcatid + 1;
+        $categories = array();
+        // We delete category 4 alone, and specify that the new parent must be category 6
+        $category7->newparent = $inexistantid;
+        $categories[] = $category7;
+        $params = array('categories' => $categories);
+
+        try {
+            $client->call($function, $params);
+            $this->assertTrue(false);
+        }
+        catch (Exception $ex) {
+            $this->assertTrue(true);
+        }
+
+        // Check if category 8 stills exists and reflects same parent
+        $result = $DB->get_record('course_categories', array('id' => $category8->id));
+
+        $this->assertTrue($result->parent == $category7->id);
+
+
+        /*
+         * Delete non existing category
+         */
+        $categories = array();
+        $maxcatid = $DB->get_field('course_categories', 'MAX(id)', array());
+        $inexistantid = $maxcatid + 1;
+        $category9->id = $inexistantid;
+        unset($category9->name);
+        $categories[] = $category9;
+
+        $params = array('categories' => $categories);
+        try {
+            $client->call($function, $params);
+            $this->assertTrue(false);
+        }
+        catch (Exception $ex) {
+            $this->assertTrue(true);
+        }
+
+        // Delete the categories used for testing, in case anything went wrong
+        $DB->delete_records('course_categories', array('id' => $category->id));
+        $DB->delete_records('course_categories', array('id' => $category2->id));
+        $DB->delete_records('course_categories', array('id' => $category3->id));
+        $DB->delete_records('course_categories', array('id' => $category4->id));
+        $DB->delete_records('course_categories', array('id' => $category5->id));
+        $DB->delete_records('course_categories', array('id' => $category6->id));
+        $DB->delete_records('course_categories', array('id' => $category7->id));
+        $DB->delete_records('course_categories', array('id' => $category8->id));
+        $DB->delete_records('course_categories', array('id' => $category9->id));
     }
 
 }

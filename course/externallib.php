@@ -692,6 +692,74 @@ class core_course_external extends external_api {
         );
     }
 
+	
+    /**
+    * Returns description of method parameters
+    * @return external_function_parameters
+    */
+    public static function delete_categories_parameters() {
+        return new external_function_parameters(
+            array(
+                'categories' => new external_multiple_structure(
+                    new external_single_structure(
+                        array(
+                            'id' => new external_value(PARAM_INT, 'category id to delete'),
+                            'newparent' => new external_value(PARAM_INT, 
+                                            'the parent category to move the contents to, if specified', VALUE_OPTIONAL)
+                        )
+                    )
+                )
+            )
+        );
+    }
+	
+
+    /**
+    * Delete categories
+    * @param array $options
+    * @return array
+    */
+    public static function delete_categories($options) {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . "/course/lib.php");
+
+        //validate parameter
+        $params = self::validate_parameters(self::delete_categories_parameters(), array('categories' => $options));	
+
+        foreach ($params['categories'] as $category) {
+            if (!$deletecat = $DB->get_record('course_categories', array('id'=>$category['id']))) {
+                throw new moodle_exception(get_string('invalidcategoryid'), 'webservice', null);
+            }
+            $context = context_coursecat::instance($deletecat->id);
+            require_capability('moodle/category:manage', $context);
+            require_capability('moodle/category:manage', get_category_or_system_context($deletecat->parent));
+
+            self::validate_context($context);
+            self::validate_context(get_category_or_system_context($deletecat->parent));
+
+            //if a new parent was specified, move the subcontents to the new parent
+            if (!empty($category['newparent']))
+                category_delete_move($deletecat, $category['newparent'], false);
+            else 
+                category_delete_full($deletecat, false);
+            $deletedcategories[] = array('id' => $category['id']);
+        }
+        return $deletedcategories;
+    }
+
+    /**
+    * Returns description of method parameters
+    * @return external_function_parameters
+    */
+    public static function delete_categories_returns() {
+        return new external_multiple_structure(
+            new external_single_structure(
+                array(
+                    'id' => new external_value(PARAM_INT, 'category id'),
+                )
+            )
+        );
+    }
 }
 
 /**
