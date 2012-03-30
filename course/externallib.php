@@ -692,73 +692,81 @@ class core_course_external extends external_api {
         );
     }
 
-	
     /**
-    * Returns description of method parameters
-    * @return external_function_parameters
-    */
-    public static function delete_categories_parameters() {
+     * Returns description of method parameters
+     * @return external_function_parameters
+     * @since Moodle 2.3
+     */
+    public static function update_categories_parameters() {
         return new external_function_parameters(
             array(
                 'categories' => new external_multiple_structure(
                     new external_single_structure(
                         array(
-                            'id' => new external_value(PARAM_INT, 'category id to delete'),
-                            'newparent' => new external_value(PARAM_INT, 
-                                            'the parent category to move the contents to, if specified', VALUE_OPTIONAL)
+                            'id'       => new external_value(PARAM_INT, 'course id'),
+                            'name' => new external_value(PARAM_TEXT, 'category name', VALUE_OPTIONAL),
+                            'idnumber' => new external_value(PARAM_RAW, 'category id number', VALUE_OPTIONAL),
+                            'parent' => new external_value(PARAM_INT, 'parent category id', VALUE_OPTIONAL),
+                            'description' => new external_value(PARAM_RAW, 'category description', VALUE_OPTIONAL)
                         )
                     )
                 )
             )
         );
     }
-	
 
     /**
-    * Delete categories
-    * @param array $options
-    * @return array
-    */
-    public static function delete_categories($options) {
+     * Update categories
+     * @param array $courses
+     * @return null
+     * @since Moodle 2.3
+     */
+    public static function update_categories($categories) {
         global $CFG, $DB;
         require_once($CFG->dirroot . "/course/lib.php");
 
-        //validate parameter
-        $params = self::validate_parameters(self::delete_categories_parameters(), array('categories' => $options));	
+        // Validate parameters
+        $params = self::validate_parameters(self::update_categories_parameters(), array('categories' => $categories));
 
-        foreach ($params['categories'] as $category) {
-            if (!$deletecat = $DB->get_record('course_categories', array('id'=>$category['id']))) {
-                throw new moodle_exception(get_string('invalidcategoryid'), 'webservice', null);
+        foreach ($params['categories'] as $c) {
+            if (!$category = $DB->get_record('course_categories', array('id' => $c['id']))) 
+                throw new moodle_exception('unknowcategory');
+            
+            $categorycontext = context_coursecat::instance($c['id']);
+            require_capability('moodle/category:manage', $categorycontext);
+
+            if (!empty($c['name'])) {
+                if (strlen($c['name'])>30)
+                     throw new moodle_exception('category name is too long.');
+                $category->name = $c['name'];
             }
-            $context = context_coursecat::instance($deletecat->id);
-            require_capability('moodle/category:manage', $context);
-            require_capability('moodle/category:manage', get_category_or_system_context($deletecat->parent));
-
-            self::validate_context($context);
-            self::validate_context(get_category_or_system_context($deletecat->parent));
-
-            //if a new parent was specified, move the subcontents to the new parent
-            if (!empty($category['newparent']))
-                category_delete_move($deletecat, $category['newparent'], false);
-            else 
-                category_delete_full($deletecat, false);
-            $deletedcategories[] = array('id' => $category['id']);
+            if (!empty($c['idnumber'])) {
+                if (strlen($c['idnumber'])>100)
+                    throw new moodle_exception('id number is too long');
+                $category->idnumber = $c['idnumber'];
+            }
+            if (!empty($c['description']))
+                $category->description = $c['description'];
+            if (!empty($c['parent']) && ($category->parent != $c['parent'])) {
+                // First check if parent exists
+                if (!$parent_cat = $DB->get_record('course_categories', array('id' => $c['parent'])))
+                    throw new moodle_exception('unknowcategory');
+                // Then check if we have capability
+                require_capability('moodle/category:manage', get_category_or_system_context((int)$c['parent']));
+                // Finally move the category
+                move_category($category, $parent_cat);
+                $category->parent = $c['parent'];
+            }
+            $DB->update_record('course_categories', $category);
         }
-        return $deletedcategories;
     }
 
     /**
-    * Returns description of method parameters
-    * @return external_function_parameters
-    */
-    public static function delete_categories_returns() {
-        return new external_multiple_structure(
-            new external_single_structure(
-                array(
-                    'id' => new external_value(PARAM_INT, 'category id'),
-                )
-            )
-        );
+     * Returns description of method result value
+     * @return external_description
+     */
+    public static function update_categories_returns() {
+        return null;
     }
 }
 

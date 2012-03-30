@@ -30,7 +30,11 @@
 defined('MOODLE_INTERNAL') || die();
 
 
+<<<<<<< HEAD
 $version  = 2012032900.06;              // YYYYMMDD      = weekly release date of this DEV branch
+=======
+$version  = 2012032900.05;              // YYYYMMDD      = weekly release date of this DEV branch
+>>>>>>> a303032... Implement core_course_update_categories, add webform and unittests
                                         //         RR    = release increments - 00 in DEV branches
                                         //           .XX = incremental changes
 
